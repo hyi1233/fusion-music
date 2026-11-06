@@ -7,6 +7,7 @@ import { parseLRC } from '../../utils/lyrics/parserCore';
 import type { LyricData } from '../../types';
 import type { Theme } from '../../types';
 import { usePlayerStore } from '../../player/playerStore';
+import { fetchLyric, PLACEHOLDER_LINES } from '../../sources/lyrics';
 import type { LyricLine } from '../../types/music';
 
 /** 默认主题（Folia 的 Theme 契约） */
@@ -21,14 +22,9 @@ const DEFAULT_THEME: Theme = {
 };
 
 /**
- * 占位歌词：当前音源链路（酷我/酷狗/QQ）还没接歌词下载（M3 计划）。
- * 播放时给一屏"没有歌词"的提示行，visualizer 照常跑背景动画。
+ * 占位歌词已移到 sources/lyrics.ts（PLACEHOLDER_LINES）：取词失败/无词时回落，
+ * 播放不阻塞。
  */
-const PLACEHOLDER_LINES: LyricLine[] = [
-    { time: 0, text: '正在播放' },
-    { time: 3, text: '这首歌暂时没有歌词' },
-    { time: 8, text: '歌词源接入将在后续版本提供' },
-];
 
 /** LyricLine[]（music.ts 简版）→ Folia Line[]（types.ts 完整契约） */
 function toFoliaLines(simple: LyricLine[]): import('../../types').Line[] {
@@ -56,11 +52,26 @@ export function PlayingView({ onBack }: { onBack: () => void }): React.JSX.Eleme
     const seek = usePlayerStore(s => s.seek);
     const [mode, setMode] = useState<import('../../types').VisualizerMode>(DEFAULT_VISUALIZER_MODE);
 
-    // 歌词数据：无 LRC 源时用占位行；M3 接歌词 API 后在这里换成真实解析
-    const lyricData: LyricData = useMemo(() => {
-        const lines = toFoliaLines(PLACEHOLDER_LINES);
-        return { lines, isWordByWord: false };
-    }, []);
+    // 歌词数据：track 变化时异步取词（内存缓存）；未取到/失败回落占位行，不阻塞播放。
+    // 保留完整 Folia Line[]（QRC 逐字时间不丢失）
+    const [loaded, setLoaded] = useState<LyricData | null>(null);
+    useEffect(() => {
+        let alive = true;
+        setLoaded(null);
+        if (track) {
+            void fetchLyric(track).then(data => {
+                if (alive) setLoaded(data);
+            });
+        }
+        return () => {
+            alive = false;
+        };
+    }, [track]);
+
+    const lyricData: LyricData = useMemo(
+        () => loaded ?? PLACEHOLDER_LINES,
+        [loaded],
+    );
 
     const onKeyUp = useCallback(
         (e: React.KeyboardEvent) => {

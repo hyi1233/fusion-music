@@ -1,0 +1,8 @@
+{
+  "name": "fusion-music",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "自研音乐播放器：Folia 歌词视觉核心 + 洛雪音源生态",
+  "license": "AGPL-3.0"
+}

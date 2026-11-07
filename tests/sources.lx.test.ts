@@ -42,7 +42,7 @@ describe('loadRenderApiScript', () => {
     expect(httpTextMock).toHaveBeenCalledTimes(2); // 根路径 1 次 + 脚本本体 1 次，之后走缓存
     expect(s1).toContain('musicUrl');
     // CDN 下载不带 key（带 key 会触发预检），所以第二参为无 headers 空参
-    expect(httpTextMock).toHaveBeenNthCalledWith(2, 'https://cdn.example/render_api.js', {});
+    expect(httpTextMock).toHaveBeenNthCalledWith(2, 'https://cdn.example/render_api.js', { headers: {} });
     expect(s2).toBe(s1);
   });
 

@@ -66,7 +66,7 @@ export function parseRankSongs(json: { songs?: { list?: KugouRankSong[] } }): So
 
 /** 榜单歌曲：rankid → 30 条/页 */
 export async function fetchChartSongs(rankId: string, page = 1): Promise<SongSummary[]> {
-  const url = `https://m.kugou.com/rank/info/?rankid=${encodeURIComponent(rankId)}&page=${page}&json=true`;
+  const url = `${import.meta.env.DEV ? '/kg' : 'https://m.kugou.com'}/rank/info/?rankid=${encodeURIComponent(rankId)}&page=${page}&json=true`;
   const data = await httpJson<{ songs?: { list?: KugouRankSong[] } }>(url);
   const songs = parseRankSongs(data);
   if (page === 1 && songs.length === 0) {
@@ -79,7 +79,7 @@ export async function fetchChartSongs(rankId: string, page = 1): Promise<SongSum
 export async function fetchChartList(): Promise<Chart[]> {
   try {
     const data = await httpJson<{ rank?: { list?: KugouRankItem[] } }>(
-      'http://m.kugou.com/rank/list&json=true',
+      import.meta.env.DEV ? '/kg/rank/list&json=true' : 'https://m.kugou.com/rank/list&json=true',
     );
     const parsed = parseRankList(data);
     return parsed.length > 0 ? parsed : BUILTIN_CHARTS;

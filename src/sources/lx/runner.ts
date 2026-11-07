@@ -34,16 +34,20 @@ const IFRAME_BOOTSTRAP = String.raw`
 var __seq = 0;
 var __pending = new Map();
 var __initedHandler = null;
+var __reqHandler = null;
 globalThis.lx = {
   version: '2.0.0',
   env: 'web',
   EVENT_NAMES: __EVENT_NAMES__,
-  request: function (method, options, callback) {
+  request: function (url, options, callback) {
     var id = ++__seq;
     __pending.set(id, callback);
-    window.parent.postMessage({ type: 'lx:request', id: id, options: Object.assign({}, options, { method: method }) }, '*');
+    window.parent.postMessage({ type: 'lx:request', id: id, options: Object.assign({}, options, { url: url }) }, '*');
   },
-  on: function (event, handler) { if (event === 'inited') __initedHandler = handler; },
+  on: function (event, handler) {
+    if (event === 'inited') __initedHandler = handler;
+    if (event === 'request') __reqHandler = handler;
+  },
   send: function (event, payload) {
     window.parent.postMessage({ type: 'lx:send', event: event, payload: payload }, '*');
   },
@@ -62,14 +66,16 @@ window.addEventListener('message', function (ev) {
       cb(m.error ? new Error(m.error) : null, m.resp, m.resp && m.resp.body);
     }
   } else if (m.type === 'lx:gmurl') {
+    // 标准洛雪协议：调脚本注册的 request 处理器（action musicUrl）
     Promise.resolve()
       .then(function () {
-        var fn = globalThis.getMusicUrl;
-        if (typeof fn !== 'function') throw new Error('音源脚本未导出 getMusicUrl');
-        return fn(m.source, m.songId, m.quality);
+        var h = __reqHandler;
+        if (typeof h !== 'function') throw new Error('音源脚本未注册 request 处理器');
+        return h({ action: 'musicUrl', source: m.source, info: { type: m.quality, musicInfo: { hash: m.songId, songmid: m.songId } } });
       })
       .then(function (r) {
-        window.parent.postMessage({ type: 'lx:gmurl-result', url: r && r.url }, '*');
+        var url = typeof r === 'string' ? r : (r && r.url);
+        window.parent.postMessage({ type: 'lx:gmurl-result', url: url }, '*');
       })
       .catch(function (e) {
         window.parent.postMessage({ type: 'lx:gmurl-result', error: String(e && e.message || e) }, '*');
@@ -80,8 +86,6 @@ try {
   __SOURCE_SCRIPT__
   if (typeof __initedHandler === 'function') {
     __initedHandler({ status: true });
-  } else {
-    window.parent.postMessage({ type: 'lx:inited', info: { status: true } }, '*');
   }
 } catch (e) {
   window.parent.postMessage({ type: 'lx:error', message: String(e && e.message || e) }, '*');
@@ -108,6 +112,11 @@ export function createLxSandbox(bridge: LxSandboxBridge): Promise<LxSandbox> {
     pending.clear();
     iframe.remove();
   };
+
+  // onMessage 在 Promise 构造之前就绑定，init/resolve 句柄先声明后赋值
+  let initTimer = 0;
+  let resolveSandboxFn: (v: LxSandbox) => void = () => {};
+  let rejectSandboxFn: (e: Error) => void = () => {};
 
   const onMessage = (ev: MessageEvent) => {
     if (ev.source !== iframe.contentWindow) return;
@@ -139,7 +148,16 @@ export function createLxSandbox(bridge: LxSandboxBridge): Promise<LxSandbox> {
           .then(async (resp) => {
             const headers: Record<string, string> = {};
             resp.headers.forEach((v, k) => (headers[k] = v));
-            return { status: resp.status, headers, body: await resp.text() };
+            let body: string | unknown = await resp.text();
+            // 洛雪源脚本普遍直接读 body.code/body.url —— JSON 响应自动 parse
+            if (typeof body === 'string' && /json/i.test(headers['content-type'] ?? '')) {
+              try {
+                body = JSON.parse(body);
+              } catch {
+                /* 保持原文 */
+              }
+            }
+            return { status: resp.status, headers, body };
           })
           .then(entry.resolve, entry.reject)
           .finally(() => {
@@ -149,6 +167,16 @@ export function createLxSandbox(bridge: LxSandboxBridge): Promise<LxSandbox> {
         break;
       }
       case 'lx:send':
+        // 标准洛雪脚本用 send(EVENT_NAMES.inited) 报告就绪 → 视为沙箱初始化完成
+        if (msg.event === 'inited') {
+          clearTimeout(initTimer);
+          bridge.onEvent('inited', msg.payload);
+          resolveSandboxFn({
+            getMusicUrl: makeGmurl(iframe),
+            destroy,
+          });
+          break;
+        }
         bridge.onEvent(msg.event as string, msg.payload);
         break;
       case 'lx:inited':
@@ -171,38 +199,44 @@ export function createLxSandbox(bridge: LxSandboxBridge): Promise<LxSandbox> {
   window.addEventListener('message', onMessage);
 
   return new Promise((resolveSandbox, rejectSandbox) => {
+    resolveSandboxFn = resolveSandbox;
+    rejectSandboxFn = rejectSandbox;
     const fail = (err: Error) => {
       clearTimeout(initTimer);
       destroy();
       rejectSandbox(err);
     };
-    const initTimer = window.setTimeout(() => fail(new Error('洛雪音源脚本初始化超时（15s）')), 15000);
+    initTimer = window.setTimeout(() => fail(new Error('洛雪音源脚本初始化超时（15s）')), 15000) as unknown as number;
 
     iframe.addEventListener('load', () => {
       const doc = iframe.contentDocument;
       if (!doc) return fail(new Error('无法创建音源沙箱 iframe'));
       const injected = IFRAME_BOOTSTRAP
         .replace('__EVENT_NAMES__', JSON.stringify(LX_EVENT_NAMES))
-        .replace('__SOURCE_SCRIPT__', bridge.script);
+        .replace('__SOURCE_SCRIPT__', () => bridge.script);
       doc.open();
       doc.write(`<!doctype html><script>${injected}<\/script>`);
       doc.close();
     });
-
-    // inited 后 resolve；onInited 只在脚本侧 inited 成功时触发
-    const origOnInited = bridge.onInited;
-    bridge.onInited = (info) => {
-      clearTimeout(initTimer);
-      origOnInited(info);
-      resolveSandbox({
-        getMusicUrl: (source, songId, quality) =>
-          new Promise((resolve, reject) => {
-            resolveGmurl = resolve;
-            rejectGmurl = reject;
-            iframe.contentWindow?.postMessage({ type: 'lx:gmurl', source, songId, quality }, '*');
-          }),
-        destroy,
-      });
-    };
   });
+}
+
+/** 构造 getMusicUrl：postMessage 进沙箱，等 lx:gmurl-result 回来 */
+function makeGmurl(iframe: HTMLIFrameElement) {
+  let resolveGmurl: (r: { url: string }) => void = () => {};
+  let rejectGmurl: (e: Error) => void = () => {};
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== iframe.contentWindow) return;
+    const msg = ev.data as { type?: string; error?: string; url?: string };
+    if (msg?.type === 'lx:gmurl-result') {
+      if (msg.error) rejectGmurl(new Error(msg.error));
+      else resolveGmurl({ url: String(msg.url) });
+    }
+  });
+  return (source: string, songId: string, quality: string) =>
+    new Promise<{ url: string }>((resolve, reject) => {
+      resolveGmurl = resolve;
+      rejectGmurl = reject;
+      iframe.contentWindow?.postMessage({ type: 'lx:gmurl', source, songId, quality }, '*');
+    });
 }

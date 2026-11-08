@@ -1,0 +1,1 @@
+import{T as e}from"./appPlaybackHelpers-DHMiQu0d.js";var t=e(e=>({message:null,held:!1,setMessage:t=>e(e=>{let n=typeof t==`function`?t(e.message):t;return n===e.message?{message:n}:{message:n,held:!1}})})),n=e=>{t.getState().setMessage(e)};export{n as t};

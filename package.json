@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:webview": "vite build --config vite.webview.config.ts",
+    "dev:webview": "vite --config vite.webview.config.ts --open /folia-webview.html?demo=1",
     "preview": "vite preview",
     "test": "vitest run"
   },

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Folia WebView 宿主 harness</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #05070d;
+        color: #e8f0ff;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      #app {
+        display: flex;
+        height: 100%;
+      }
+      #stage {
+        flex: 1;
+        border: 0;
+        background: #000;
+      }
+      #panel {
+        width: 340px;
+        display: flex;
+        flex-direction: column;
+        border-left: 1px solid #1e293b;
+      }
+      #bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        padding: 10px;
+        border-bottom: 1px solid #1e293b;
+      }
+      button,
+      select {
+        font: inherit;
+        color: inherit;
+        background: #0f172a;
+        border: 1px solid #24324a;
+        border-radius: 6px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
+      #meta {
+        padding: 8px 10px;
+        border-bottom: 1px solid #1e293b;
+        color: #94a3b8;
+      }
+      #status {
+        color: #7dd3fc;
+      }
+      #log {
+        flex: 1;
+        overflow: auto;
+        padding: 8px 10px;
+        color: #94a3b8;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <iframe id="stage" src="./folia-webview.html?controls=0" allow="autoplay"></iframe>
+      <div id="panel">
+        <div id="bar">
+          <button id="play">暂停</button>
+          <button id="controls">控制条</button>
+          <select id="mode"></select>
+        </div>
+        <div id="meta">
+          <div>页面状态：<span id="status">等待 ready…</span></div>
+          <div>播放时间：<span id="time">0.00 / 48s</span></div>
+        </div>
+        <div id="log"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/webview/hostHarness.ts"></script>
+  </body>
+</html>

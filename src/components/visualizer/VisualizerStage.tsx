@@ -43,6 +43,12 @@ export interface VisualizerStageProps {
     mode?: VisualizerMode;
     /** The playback clock in seconds. When omitted the stage runs its own looping clock. */
     currentTime?: number;
+    /**
+     * A host-driven clock as a motion value, for hosts that advance it every animation frame
+     * (the RN WebView layer does: `setCurrentTime` arrives at 10–20 Hz, the local rAF clock at 60).
+     * When given it wins over `currentTime`, and the stage does not re-render per frame.
+     */
+    clock?: MotionValue<number>;
     /** The song length in seconds, used by styles that read it. */
     duration?: number;
     /** The colours and typography the styles draw with. */
@@ -132,6 +138,7 @@ const VisualizerStage: React.FC<VisualizerStageProps> = ({
     lines,
     mode = DEFAULT_VISUALIZER_MODE,
     currentTime,
+    clock: hostClock,
     duration,
     theme = DEFAULT_STAGE_THEME,
     seed,
@@ -145,17 +152,17 @@ const VisualizerStage: React.FC<VisualizerStageProps> = ({
     className,
     onLineIndexChange,
 }) => {
-    const driven = typeof currentTime === 'number';
+    const driven = typeof currentTime === 'number' || hostClock !== undefined;
     // Only one of the two clocks runs; the other is inert but still a valid motion value, because
     // the visualizer contract requires one either way.
     const { time: demoTime, index: demoIndex } = useDemoClock(!driven, lines, 1.6);
     const externalTime = useMotionValue(currentTime ?? 0);
 
     useEffect(() => {
-        if (driven) externalTime.set(currentTime as number);
-    }, [driven, currentTime, externalTime]);
+        if (driven && !hostClock) externalTime.set(currentTime as number);
+    }, [driven, currentTime, hostClock, externalTime]);
 
-    const clock = driven ? externalTime : demoTime;
+    const clock = hostClock ?? (driven ? externalTime : demoTime);
     const [trackedIndex, setTrackedIndex] = useState(-1);
 
     useEffect(() => {

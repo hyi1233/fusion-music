@@ -2,3 +2,9 @@ node_modules
 dist
 *.local
 .DS_Store
+tsconfig.tsbuildinfo
+artifacts/
+node_modules/
+dist/
+dist-webview/
+*.log

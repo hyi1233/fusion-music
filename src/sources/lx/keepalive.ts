@@ -8,7 +8,39 @@ export const RENDER_API_ROOT = 'https://lxmusicapi.onrender.com';
 export const REQUEST_KEY_HEADER = 'X-Request-Key';
 export const REQUEST_KEY_VALUE = 'share-v3';
 
+/** 自定义音源脚本地址的 localStorage 键（与设置页 store 保持一致） */
+export const CUSTOM_SCRIPT_URL_KEY = 'fusion_lx_script_url';
+
 let cachedScript: string | null = null;
+let cachedCustomScript: { url: string; source: string } | null = null;
+
+/**
+ * 读取用户自定义音源脚本（设置页填写）。
+ * 没填或内容非法时返回 null —— 调用方据此跳过这一路降级。
+ */
+export async function loadCustomScript(): Promise<string | null> {
+  let url = '';
+  try {
+    if (typeof window !== 'undefined') {
+      url = (window.localStorage.getItem(CUSTOM_SCRIPT_URL_KEY) ?? '').trim();
+    }
+  } catch {
+    url = '';
+  }
+  if (!url) return null;
+  if (cachedCustomScript?.url === url) return cachedCustomScript.source;
+
+  const { httpText } = await import('../http');
+  const { SourceError } = await import('../types');
+  const { body } = await httpText(url);
+  if (!/musicUrl/.test(body) || !/EVENT_NAMES/.test(body)) {
+    throw new SourceError('SCRIPT_INVALID', '自定义音源脚本内容异常（未找到标准 musicUrl 协议）');
+  }
+  // 自定义脚本内部若引用默认 render_api，同样改写到本地代理，绕开浏览器 CORS
+  const source = body.replaceAll(RENDER_API_ROOT, '/lxapi');
+  cachedCustomScript = { url, source };
+  return source;
+}
 
 /**
  * 拉取（并缓存）音源脚本源码。失败抛 SourceError，message 可读。

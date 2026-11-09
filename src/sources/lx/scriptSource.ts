@@ -11,6 +11,9 @@ import { SourceError } from '../types';
 
 export const DEFAULT_SCRIPT_URL = '';
 
+/** 自定义脚本地址的 localStorage 键（与设置页 store 保持一致） */
+export const SCRIPT_URL_STORAGE_KEY = 'fusion_lx_script_url';
+
 /** 脚本地址是否是合法的 http(s) 地址（允许空串 = 用默认脚本）。 */
 export function isValidScriptUrl(url: string): boolean {
   const trimmed = url.trim();

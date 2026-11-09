@@ -87,8 +87,33 @@ function searchProxy(): Plugin {
   }
 }
 
+// 平台原生取链接口（酷我/QQ/酷狗）全部做来源校验：酷我直连 403、
+// QQ 带 Origin 直接 400、酷狗只能 http。页面统一请求 /native/<plat>/...，
+// 由 Node 侧按平台规则补 Referer 后转发（且不发 Origin）。
+function nativeProxy(): Plugin {
+  const middleware = async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    if (!req.url?.startsWith('/native/')) {
+      next()
+      return
+    }
+    const { handleNativeProxy } = await import('./dev/nativeProxy.mjs')
+    const out = await handleNativeProxy(req.url)
+    res.writeHead(out.status, out.headers)
+    res.end(out.body)
+  }
+  return {
+    name: 'native-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware)
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), traditionalLocalePlugin(), lxApiProxy(), searchProxy()],
+  plugins: [react(), tailwindcss(), traditionalLocalePlugin(), lxApiProxy(), searchProxy(), nativeProxy()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -28,7 +28,7 @@ async function loadStore() {
 describe('playerStore 播放错误上报', () => {
   it('音源解析失败时把错误写进 state（而不是静默显示「未播放」）', async () => {
     vi.doMock('../src/sources', () => ({
-      resolvePlayUrl: vi.fn(async () => {
+      resolvePlayUrlWithFallback: vi.fn(async () => {
         throw new Error('获取播放链接失败：block ip');
       }),
     }));
@@ -42,7 +42,11 @@ describe('playerStore 播放错误上报', () => {
 
   it('解析成功时 error 为 null', async () => {
     vi.doMock('../src/sources', () => ({
-      resolvePlayUrl: vi.fn(async () => 'https://example.com/a.mp3'),
+      resolvePlayUrlWithFallback: vi.fn(async () => ({
+        url: 'https://example.com/a.mp3',
+        source: '自定义脚本',
+        attempts: [{ source: '自定义脚本', ok: true, id: 'custom' }],
+      })),
     }));
     const { usePlayerStore } = await loadStore();
     await usePlayerStore.getState().playTracks([
@@ -56,9 +60,13 @@ describe('playerStore 播放错误上报', () => {
   it('先失败后成功：新的播放请求会覆盖旧错误', async () => {
     let shouldFail = true;
     vi.doMock('../src/sources', () => ({
-      resolvePlayUrl: vi.fn(async () => {
+      resolvePlayUrlWithFallback: vi.fn(async () => {
         if (shouldFail) throw new Error('boom');
-        return 'https://example.com/b.mp3';
+        return {
+          url: 'https://example.com/b.mp3',
+          source: '默认洛雪源',
+          attempts: [{ source: '默认洛雪源', ok: true, id: 'default' }],
+        };
       }),
     }));
     const { usePlayerStore } = await loadStore();

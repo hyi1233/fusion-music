@@ -4,7 +4,7 @@
 // 语言切换走上游既有的 applyAppLanguagePreference，所以和上游设置面板是一套状态。
 
 import { useCallback, useEffect, useState } from 'react';
-import { Languages, LoaderCircle, Music, RotateCcw, Sparkles } from 'lucide-react';
+import { FlaskConical, Languages, LoaderCircle, Music, RotateCcw, Sparkles } from 'lucide-react';
 import { useFusionT } from '../../i18n/fusion/useFusionT';
 import { applyAppLanguagePreference, type AppLanguagePreference } from '../../i18n/config';
 import { useFusionUiStore } from '../../stores/useFusionUiStore';
@@ -103,6 +103,10 @@ export function SettingsView(): React.JSX.Element {
           {t('settings.audioSource')}
         </div>
         <div className="mb-3 text-xs text-white/45">{t('settings.audioSourceHint')}</div>
+        <div className="mb-3 rounded-lg bg-black/20 px-3 py-2 text-xs text-white/50">
+          <span className="font-medium text-white/70">{t('settings.sourceChain')}</span>
+          <span className="ml-2">{t('settings.sourceChainHint')}</span>
+        </div>
         <label className="mb-1 block text-xs text-white/55" htmlFor="fusion-script-url">
           {t('settings.scriptUrl')}
         </label>
@@ -135,6 +139,18 @@ export function SettingsView(): React.JSX.Element {
           >
             <RotateCcw size={14} />
             {t('settings.reset')}
+          </button>
+          <button
+            onClick={() => {
+              // 本地 mock 音源：验证「自定义脚本 → 沙箱 → 播放」整条链路是否通
+              const url = `${window.location.origin}/mock/lx-script.js`;
+              setUrlDraft(url);
+              setTestResult({ ok: true, message: t('settings.mockSourceApplied') });
+            }}
+            className="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-1.5 text-sm text-white/60 transition hover:bg-white/10"
+          >
+            <FlaskConical size={14} />
+            {t('settings.useMockSource')}
           </button>
           {saved ? <span className="text-xs text-emerald-300">{t('settings.saved')}</span> : null}
         </div>

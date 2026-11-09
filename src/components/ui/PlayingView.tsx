@@ -65,6 +65,7 @@ export function PlayingView({ onBack }: { onBack: () => void }): React.JSX.Eleme
   const queue = usePlayerStore(s => s.queue);
   const currentIndex = usePlayerStore(s => s.currentIndex);
   const error = usePlayerStore(s => s.error);
+  const resolveAttempts = usePlayerStore(s => s.resolveAttempts);
   const toggle = usePlayerStore(s => s.toggle);
   const next = usePlayerStore(s => s.next);
   const previous = usePlayerStore(s => s.previous);
@@ -178,7 +179,17 @@ export function PlayingView({ onBack }: { onBack: () => void }): React.JSX.Eleme
             <div className="min-w-0">
               <p className="font-medium">{t('playing.errorTitle')}</p>
               <p className="text-rose-100/80">{t('playing.errorHint')}</p>
-              <p className="truncate text-rose-100/60">{t('playing.errorDetail', { message: error })}</p>
+              <p className="break-words text-rose-100/60">{t('playing.errorDetail', { message: error })}</p>
+              {resolveAttempts.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  <p className="text-rose-100/60">{t('playing.sourceAttempts')}</p>
+                  {resolveAttempts.map((a, i) => (
+                    <p key={`${a.source}-${i}`} className="break-words text-rose-100/50">
+                      · {a.source}：{a.ok ? t('playing.sourceOk') : (a.reason ?? '-')}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

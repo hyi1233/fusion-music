@@ -12,7 +12,7 @@ import { qrcDecrypt } from './qrcDecrypt';
 import { applyDetectedChorusEffects, applyChorusRangesByTime } from '../../../utils/lyrics/chorusEffects';
 import type { ChorusRange } from '../../../utils/lyrics/chorusEffects';
 import { getOriginalCoverUrl } from '../../../utils/coverUrl';
-import { lyricProxyWebUrl } from '../../lyricProxy';
+import { lyricProxyWebPostUrl } from '../../lyricProxy';
 
 const isElectron = typeof window !== 'undefined' && (window as any).electron;
 
@@ -41,17 +41,18 @@ async function requestQQ(method: string, module: string, param: any): Promise<an
   };
 
   const targetUrl = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
-  const url = isElectron ? targetUrl : lyricProxyWebUrl(targetUrl);
+  // 非 Electron 下走本地中继：QQ 接口不带 CORS 头，且只认 POST + JSON body
+  const useProxy = !isElectron;
+  const url = useProxy ? lyricProxyWebPostUrl(targetUrl, payload) : targetUrl;
 
   const response = await fetch(url, {
     method: 'POST',
     credentials: isElectron ? 'omit' : 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': 'tmeLoginType=-1;',
-      'User-Agent': 'okhttp/3.14.9',
+      ...(isElectron ? { Cookie: 'tmeLoginType=-1;', 'User-Agent': 'okhttp/3.14.9' } : {}),
     },
-    body: JSON.stringify(payload),
+    body: isElectron ? JSON.stringify(payload) : undefined,
   });
 
   if (!response.ok) {

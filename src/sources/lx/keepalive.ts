@@ -24,8 +24,8 @@ export async function loadRenderApiScript(): Promise<string> {
   const { httpText } = await import('../http');
   const { SourceError } = await import('../types');
   const headers = { [REQUEST_KEY_HEADER]: REQUEST_KEY_VALUE };
-  const isDev = import.meta.env.DEV;
-  const rootUrl = isDev ? '/lxapi/' : RENDER_API_ROOT;
+  // 一律走本地 /lxapi 代理：onrender.com 不返回 CORS 头，浏览器直连会被拦
+  const rootUrl = '/lxapi/';
 
   let scriptUrl = `${RENDER_API_ROOT}/render_api.js`;
   try {
@@ -38,7 +38,7 @@ export async function loadRenderApiScript(): Promise<string> {
 
   const { body } = await httpText(scriptUrl, {
     headers:
-      scriptUrl.startsWith(RENDER_API_ROOT) || scriptUrl.startsWith('/lxapi')
+      scriptUrl.startsWith('/lxapi') || scriptUrl.startsWith(RENDER_API_ROOT)
         ? headers // 只有音源 API 本体才要 key；jsDelivr 等 CDN 带 key 反而触发预检
         : {},
   });
@@ -47,6 +47,6 @@ export async function loadRenderApiScript(): Promise<string> {
     throw new SourceError('SCRIPT_INVALID', '音源脚本内容异常（未找到标准 musicUrl 协议）');
   }
   // dev 下把脚本内的 API 地址改写为本地代理路径，绕开浏览器 CORS
-  cachedScript = isDev ? body.replaceAll(RENDER_API_ROOT, '/lxapi') : body;
+  cachedScript = body.replaceAll(RENDER_API_ROOT, '/lxapi');
   return cachedScript;
 }

@@ -11,7 +11,8 @@
     "build:webview": "vite build --config vite.webview.config.ts",
     "dev:webview": "vite --config vite.webview.config.ts --open /folia-webview.html?demo=1",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "serve": "node dev/serve.mjs"
   },
   "dependencies": {
     "@applemusic-like-lyrics/ttml": "^1.0.1",

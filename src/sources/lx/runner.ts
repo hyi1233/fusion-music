@@ -103,7 +103,6 @@ export function createLxSandbox(bridge: LxSandboxBridge): Promise<LxSandbox> {
   const iframe = document.createElement('iframe');
   iframe.style.display = 'none';
   iframe.setAttribute('sandbox', 'allow-scripts');
-  iframe.src = 'about:blank';
   document.body.appendChild(iframe);
 
   const destroy = () => {
@@ -208,17 +207,20 @@ export function createLxSandbox(bridge: LxSandboxBridge): Promise<LxSandbox> {
     };
     initTimer = window.setTimeout(() => fail(new Error('洛雪音源脚本初始化超时（15s）')), 15000) as unknown as number;
 
-    iframe.addEventListener('load', () => {
-      const doc = iframe.contentDocument;
-      if (!doc) return fail(new Error('无法创建音源沙箱 iframe'));
-      const injected = IFRAME_BOOTSTRAP
-        .replace('__EVENT_NAMES__', JSON.stringify(LX_EVENT_NAMES))
-        .replace('__SOURCE_SCRIPT__', () => bridge.script);
-      doc.open();
-      doc.write(`<!doctype html><script>${injected}<\/script>`);
-      doc.close();
-    });
+    // 用 srcdoc 注入脚本：sandbox="allow-scripts" 的 iframe 处于不透明源，
+    // 父页面读不到 iframe.contentDocument（真实浏览器同样如此），所以不能走
+    // contentDocument.write。srcdoc 属于 iframe 自身的文档，可正常执行脚本，
+    // 且脚本内 window.parent.postMessage 仍能跨源通信。
+    const injected = IFRAME_BOOTSTRAP
+      .replace('__EVENT_NAMES__', JSON.stringify(LX_EVENT_NAMES))
+      .replace('__SOURCE_SCRIPT__', () => escapeScript(bridge.script));
+    iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"></head><body><script>${injected}<\/script></body></html>`;
   });
+}
+
+/** 防止脚本内容里的 </script> 提前闭合 srcdoc 中的 script 标签 */
+function escapeScript(src: string): string {
+  return src.replace(/<\/(script)/gi, '<\\/$1');
 }
 
 /** 构造 getMusicUrl：postMessage 进沙箱，等 lx:gmurl-result 回来 */

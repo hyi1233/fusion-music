@@ -2,13 +2,17 @@
 // 底部榜单切换（遥控器左右键）+ 歌曲列表（上下键 + Enter 点播进播放队列）
 
 import { useCallback, useEffect, useState } from 'react';
+import { LoaderCircle, TriangleAlert } from 'lucide-react';
 import { BUILTIN_CHARTS, fetchChartSongs } from '../../sources/charts';
 import type { Chart } from '../../sources/charts';
 import { toTrack } from '../../sources/search';
 import type { SongSummary } from '../../sources/types';
 import { usePlayerStore } from '../../player/playerStore';
+import { useFusionT } from '../../i18n/fusion/useFusionT';
+import { SongRow } from './SongRow';
 
 export function BrowseView({ onOpenPlayer }: { onOpenPlayer: () => void }): React.JSX.Element {
+  const t = useFusionT();
   const [charts] = useState<Chart[]>(BUILTIN_CHARTS);
   const [chartIndex, setChartIndex] = useState(0);
   const [songs, setSongs] = useState<SongSummary[]>([]);
@@ -30,7 +34,7 @@ export function BrowseView({ onOpenPlayer }: { onOpenPlayer: () => void }): Reac
         if (alive) setSongs(list);
       })
       .catch((e: Error) => {
-        if (alive) setError(e.message || '榜单加载失败');
+        if (alive) setError(e.message || t('browse.failed'));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -38,7 +42,7 @@ export function BrowseView({ onOpenPlayer }: { onOpenPlayer: () => void }): Reac
     return () => {
       alive = false;
     };
-  }, [chartId]);
+  }, [chartId, t]);
 
   const playAt = useCallback(
     async (index: number) => {
@@ -74,11 +78,14 @@ export function BrowseView({ onOpenPlayer }: { onOpenPlayer: () => void }): Reac
   );
 
   return (
-    <div className="flex h-full flex-col gap-3 p-6" onKeyDown={onKeyDown}>
-      <h2 className="text-xl font-semibold">浏览 · 榜单</h2>
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3 p-6" onKeyDown={onKeyDown}>
+      <div className="flex items-center gap-3">
+        <h2 className="text-lg font-semibold text-white">{t('browse.title')}</h2>
+        <span className="text-xs text-white/40">{charts[chartIndex]?.name}</span>
+      </div>
 
       {/* 榜单页签：左右键切换，同遥控器键位 */}
-      <div className="flex gap-2 overflow-x-auto">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {charts.map((c, i) => (
           <button
             key={c.id}
@@ -93,40 +100,35 @@ export function BrowseView({ onOpenPlayer }: { onOpenPlayer: () => void }): Reac
         ))}
       </div>
 
-      {loading ? <div className="p-6 text-center text-white/60">加载中…</div> : null}
-      {error ? <div className="p-6 text-center text-red-300">{error}</div> : null}
+      {loading ? (
+        <div className="flex items-center justify-center gap-2 p-6 text-white/60">
+          <LoaderCircle size={16} className="animate-spin" />
+          {t('browse.loading')}
+        </div>
+      ) : null}
+      {error ? (
+        <div className="flex items-center gap-2 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">
+          <TriangleAlert size={16} />
+          {error}
+        </div>
+      ) : null}
       {!loading && !error ? (
-        <ul className="flex-1 divide-y divide-white/5 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto rounded-lg bg-black/20 p-1">
           {songs.map((s, i) => (
-            <li key={`${s.source}:${s.id}`}>
-              <button
-                onClick={() => void playAt(i)}
-                className={
-                  'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ' +
-                  (i === focusIndex ? 'rounded-lg bg-white/15' : 'hover:bg-white/5')
-                }
-              >
-                <span className="w-6 shrink-0 text-center text-sm text-white/40">{i + 1}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base">{s.title}</span>
-                  <span className="block truncate text-sm text-white/50">
-                    {s.artist}
-                    {s.album ? ` · ${s.album}` : ''}
-                  </span>
-                </span>
-                <span className="shrink-0 text-sm text-white/40">{formatSec(s.duration)}</span>
-              </button>
-            </li>
+            <SongRow
+              key={`${s.source}:${s.id}`}
+              song={s}
+              index={i}
+              active={i === focusIndex}
+              onFocus={() => setFocusIndex(i)}
+              onPlay={() => void playAt(i)}
+            />
           ))}
-        </ul>
+          {!songs.length ? (
+            <div className="p-8 text-center text-white/40">{t('browse.empty')}</div>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
-}
-
-function formatSec(sec: number): string {
-  if (!sec) return '';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
 }

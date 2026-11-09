@@ -27,9 +27,9 @@ describe('parseKugou', () => {
   it('剥离 HTML 标签并映射', () => {
     const songs = parseKugou({
       status: 1,
-      data: { lists: [{ FileHash: 'h1', SongName: '<em>稻香</em>', SingerName: '周杰伦', Duration: 223 }] },
+      data: { info: [{ hash: 'h1', songname: '<em>稻香</em>', singername: '周杰伦', album_name: '叶惠美', duration: 223 }] },
     });
-    expect(songs[0]).toMatchObject({ id: 'h1', title: '稻香', duration: 223, source: 'kugou' });
+    expect(songs[0]).toMatchObject({ id: 'h1', title: '稻香', album: '叶惠美', duration: 223, source: 'kugou' });
   });
 });
 
@@ -68,7 +68,7 @@ describe('searchAll', () => {
 
   it('酷我空结果降级酷狗', async () => {
     httpTextMock.mockResolvedValue({ status: 200, body: '{"abslist":[]}' });
-    httpJsonMock.mockResolvedValue({ status: 1, data: { lists: [{ FileHash: 'h2', SongName: '晴天' }] } });
+    httpJsonMock.mockResolvedValue({ status: 1, data: { info: [{ hash: 'h2', songname: '晴天' }] } });
     const { platform } = await searchAll('晴天');
     expect(platform).toBe('kugou');
   });

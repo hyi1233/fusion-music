@@ -6,6 +6,7 @@ import zhTW from 'virtual:folia-locale-zh-TW';
 import ind from './locales/in.ts';
 import vi from './locales/vi.ts';
 import { resolveMissingTranslation } from './missingTranslation';
+import { fusionBundles } from './fusion/locales';
 
 /*
  * Chinese fallback for keys the active locale does not contain.
@@ -32,6 +33,8 @@ export function flattenLocale(obj: Record<string, any>, prefix = ''): Record<str
 }
 
 const ZH_FALLBACKS: Record<string, string> = flattenLocale(zhCN);
+// F2a：fusion 命名空间也要有中文兜底（英文/印尼语/越南语界面缺词时回简体中文）。
+const FUSION_ZH_FALLBACKS: Record<string, string> = flattenLocale(fusionBundles['zh-CN'] as Record<string, any>, 'fusion');
 
 export type AppLanguagePreference = 'system' | 'en' | 'zh-CN' | 'zh-TW' | 'in' | 'vi';
 export const APP_LANGUAGE_STORAGE_KEY = 'folia_app_language';
@@ -129,25 +132,29 @@ i18n
   .init({
     resources: {
       en: {
-        translation: en
+        translation: { ...en, fusion: fusionBundles.en }
       },
       'zh-CN': {
-        translation: zhCN
+        translation: { ...zhCN, fusion: fusionBundles['zh-CN'] }
       },
       'zh-TW': {
-        translation: zhTW
+        translation: { ...zhTW, fusion: fusionBundles['zh-TW'] }
       },
       in: {
-        translation: ind
+        translation: { ...ind, fusion: fusionBundles.en }
       },
       vi: {
-        translation: vi
+        translation: { ...vi, fusion: fusionBundles.en }
       }
     },
     fallbackLng: 'en',
-    parseMissingKeyHandler: (key: string, defaultValue?: string): string => (
-      resolveMissingTranslation(ZH_FALLBACKS, key, defaultValue)
-    ),
+    parseMissingKeyHandler: (key: string, defaultValue?: string): string => {
+      // F2a 的 fusion.* 文案：活动语言（en/in/vi）没有时回简体中文，再回默认文案。
+      if (key.startsWith('fusion.')) {
+        return FUSION_ZH_FALLBACKS[key] ?? defaultValue ?? key;
+      }
+      return resolveMissingTranslation(ZH_FALLBACKS, key, defaultValue);
+    },
     supportedLngs: ['en', 'zh-CN', 'zh-TW', 'in', 'vi'],
     lng: initialLanguagePreference === 'system' ? detectSystemLanguage() : initialLanguagePreference,
     interpolation: {

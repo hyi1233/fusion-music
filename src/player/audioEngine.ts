@@ -14,6 +14,8 @@ export class AudioEngine {
   currentTime = 0;
   duration = 0;
   volume = 1;
+  /** 最近一次播放错误（音源解析失败 / 网络错误），用于在界面上提示 */
+  lastError: string | null = null;
 
   subscribe(fn: Listener): () => void {
     this.listeners.add(fn);
@@ -57,6 +59,7 @@ export class AudioEngine {
     });
     el.addEventListener('error', () => {
       this.status = 'stopped';
+      this.lastError = 'audio-load-failed';
       this.emit();
     });
     this.audio = el;
@@ -78,6 +81,7 @@ export class AudioEngine {
   setQueue(tracks: Track[], startIndex = 0): void {
     this.queue = [...tracks];
     this.index = startIndex;
+    this.lastError = null;
     this.loadCurrent();
   }
 
@@ -96,14 +100,32 @@ export class AudioEngine {
     const el = this.ensureAudio();
     this.status = 'loading';
     el.src = track.url;
-    void el.play().catch(() => undefined);
+    this.safePlay(el);
     this.emit();
+  }
+
+  /** play() 在部分环境（jsdom、旧浏览器）不返回 Promise，这里统一兜住 */
+  private safePlay(el: HTMLAudioElement): void {
+    try {
+      const p = el.play() as Promise<void> | undefined;
+      if (p && typeof p.catch === 'function') {
+        p.catch((e) => {
+          this.lastError = e instanceof Error ? e.message : 'play-failed';
+          this.status = 'stopped';
+          this.emit();
+        });
+      }
+    } catch (e) {
+      this.lastError = e instanceof Error ? e.message : 'play-failed';
+      this.status = 'stopped';
+      this.emit();
+    }
   }
 
   toggle(): void {
     const el = this.ensureAudio();
     if (this.status === 'playing') el.pause();
-    else void el.play().catch(() => undefined);
+    else this.safePlay(el);
   }
 
   pause(): void {
@@ -111,7 +133,13 @@ export class AudioEngine {
   }
 
   async play(): Promise<void> {
-    await this.ensureAudio().play().catch(() => undefined);
+    const el = this.ensureAudio();
+    try {
+      const p = el.play() as Promise<void> | undefined;
+      if (p && typeof p.then === 'function') await p.catch(() => undefined);
+    } catch {
+      /* 忽略：交由 error 事件兜底 */
+    }
   }
 
   seek(seconds: number): void {

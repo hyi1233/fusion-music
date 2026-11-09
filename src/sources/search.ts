@@ -8,7 +8,8 @@ import type { SongSummary, Track } from './types';
 type Platform = SongSummary['source'];
 
 // ---------- 酷我 ----------
-// search.kuwo.cn/r.s 返回形如 `var jsonqueryabc = {...}` 的裸 JS，剥前缀后为 JSON。
+// search.kuwo.cn/r.s 返回的是 Python 风格的字典字面量（单引号 + True/False/None），
+// 不是合法 JSON，需要先转成合法 JSON 才能 parse。
 interface KuwoItem {
   MUSICRID?: string; // "MUSIC_123456"
   SONGNAME?: string;
@@ -17,13 +18,67 @@ interface KuwoItem {
   DURATION?: string | number; // 秒
 }
 
+/** 把 Python 风格字典字面量（单引号/True/False/None）转成合法 JSON */
+export function normalizePythonDict(text: string): string {
+  const out: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    // 已经是合法 JSON 的双引号字符串原样保留（内部可能含撇号）
+    if (c === '"') {
+      let j = i + 1;
+      let buf = '"';
+      while (j < text.length) {
+        if (text[j] === '\\') {
+          buf += text.slice(j, j + 2);
+          j += 2;
+          continue;
+        }
+        buf += text[j];
+        if (text[j] === '"') {
+          j += 1;
+          break;
+        }
+        j += 1;
+      }
+      out.push(buf);
+      i = j;
+      continue;
+    }
+    if (c === "'") {
+      let j = i + 1;
+      let buf = '';
+      while (j < text.length) {
+        if (text[j] === '\\') {
+          buf += text.slice(j, j + 2);
+          j += 2;
+          continue;
+        }
+        if (text[j] === "'") break;
+        buf += text[j];
+        j += 1;
+      }
+      out.push(JSON.stringify(buf.replace(/"/g, '\\"')));
+      i = j + 1;
+      continue;
+    }
+    out.push(c);
+    i += 1;
+  }
+  return out
+    .join('')
+    .replace(/\bTrue\b/g, 'true')
+    .replace(/\bFalse\b/g, 'false')
+    .replace(/\bNone\b/g, 'null');
+}
+
 export function parseKuwo(body: string): SongSummary[] {
   const start = body.indexOf('{');
   const end = body.lastIndexOf('}');
   if (start < 0 || end <= start) throw new SourceError('PARSE', '酷我返回了无法解析的数据');
   let data: { abslist?: KuwoItem[] };
   try {
-    data = JSON.parse(body.slice(start, end + 1)) as { abslist?: KuwoItem[] };
+    data = JSON.parse(normalizePythonDict(body.slice(start, end + 1))) as { abslist?: KuwoItem[] };
   } catch {
     throw new SourceError('PARSE', '酷我返回了无法解析的数据');
   }
@@ -31,7 +86,7 @@ export function parseKuwo(body: string): SongSummary[] {
     .filter((it) => it.MUSICRID)
     .map((it) => ({
       id: (it.MUSICRID ?? '').replace(/^MUSIC_/, ''),
-      title: it.SONGNAME ?? '',
+      title: (it.SONGNAME ?? '').replace(/&nbsp;/g, ' ').trim(),
       artist: it.ARTIST ?? '',
       album: it.ALBUM ?? '',
       duration: Number(it.DURATION ?? 0) || 0,
@@ -41,40 +96,41 @@ export function parseKuwo(body: string): SongSummary[] {
 
 async function searchKuwo(keyword: string): Promise<SongSummary[]> {
   const url =
-    `https://search.kuwo.cn/r.s?all=${encodeURIComponent(keyword)}` +
+    `/search/kuwo/r.s?all=${encodeURIComponent(keyword)}` +
     `&ft=music&rformat=json&encoding=utf8&pn=0&rn=30&jsonquery=1`;
   const { body } = await httpText(url);
   return parseKuwo(body);
 }
 
 // ---------- 酷狗 ----------
+// mobilecdn.kugou.com 的实际返回结构：data.info[]（不是 data.lists）
 interface KugouResp {
   status?: number;
   data?: {
-    lists?: Array<{
-      FileHash?: string;
-      SongName?: string;
-      SingerName?: string;
-      AlbumName?: string;
-      Duration?: number;
+    info?: Array<{
+      hash?: string;
+      songname?: string;
+      album_name?: string;
+      singername?: string;
+      duration?: number;
     }>;
   };
 }
 
 export function parseKugou(json: KugouResp): SongSummary[] {
-  return (json.data?.lists ?? []).map((it) => ({
-    id: it.FileHash ?? '',
-    title: (it.SongName ?? '').replace(/<[^>]+>/g, ''),
-    artist: (it.SingerName ?? '').replace(/<[^>]+>/g, ''),
-    album: it.AlbumName ?? '',
-    duration: it.Duration ?? 0,
+  return (json.data?.info ?? []).map((it) => ({
+    id: it.hash ?? '',
+    title: (it.songname ?? '').replace(/<[^>]+>/g, ''),
+    artist: it.singername ?? '',
+    album: it.album_name ?? '',
+    duration: it.duration ?? 0,
     source: 'kugou' as const,
   }));
 }
 
 async function searchKugou(keyword: string): Promise<SongSummary[]> {
   const url =
-    `https://mobilecdn.kugou.com/api/v3/search/song?format=json` +
+    `/search/kugou/api/v3/search/song?format=json` +
     `&keyword=${encodeURIComponent(keyword)}&page=1&pagesize=30`;
   const data = await httpJson<KugouResp>(url);
   return parseKugou(data);
@@ -109,7 +165,7 @@ export function parseQq(json: QqResp): SongSummary[] {
 
 async function searchQq(keyword: string): Promise<SongSummary[]> {
   const url =
-    `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?format=json` +
+    `/search/qq/soso/fcgi-bin/client_search_cp?format=json` +
     `&w=${encodeURIComponent(keyword)}&n=30`;
   const data = await httpJson<QqResp>(url);
   if (data.code !== 0) throw new SourceError('PLATFORM', `QQ 音乐搜索失败（code=${data.code}）`);

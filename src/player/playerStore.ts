@@ -12,6 +12,8 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
+  /** 播放错误信息（音源解析失败 / 音频加载失败），null 表示正常 */
+  error: string | null;
   /** 播放前把无 url 的 Track 经洛雪音源解析为真实流地址 */
   playTracks: (tracks: Track[], startIndex?: number) => Promise<void>;
   playTrack: (track: Track) => Promise<void>;
@@ -25,17 +27,22 @@ interface PlayerState {
 let unsubscribe: (() => void) | null = null;
 let resolveToken = 0;
 
-async function hydrateUrls(tracks: Track[]): Promise<Track[]> {
-  return Promise.all(
+async function hydrateUrls(tracks: Track[]): Promise<{ tracks: Track[]; error: string | null }> {
+  let error: string | null = null;
+  const hydrated = await Promise.all(
     tracks.map(async t => {
       if (t.url) return t;
       try {
         return { ...t, url: await resolvePlayUrl(t) };
-      } catch {
-        return t; // 解析失败的条目保留占位 url，播放时报错由内核 error 事件兜底
+      } catch (e) {
+        // 解析失败的条目保留占位 url；错误信息带到 UI 上提示，
+        // 否则用户只会看到「未播放」而不知道是音源被限流/封 IP。
+        error = e instanceof Error ? e.message : String(e);
+        return t;
       }
     }),
   );
+  return { tracks: hydrated, error };
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => {
@@ -49,6 +56,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         currentTime: audioEngine.currentTime,
         duration: audioEngine.duration,
         volume: audioEngine.volume,
+        error: audioEngine.lastError,
       });
     });
   }
@@ -61,13 +69,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     currentTime: 0,
     duration: 0,
     volume: 1,
+    error: null,
 
     playTracks: async (tracks, startIndex = 0) => {
       const token = ++resolveToken;
-      const hydrated = await hydrateUrls(tracks);
+      set({ error: null });
+      const { tracks: hydrated, error } = await hydrateUrls(tracks);
       if (token !== resolveToken) return; // 期间用户又点了新的，丢弃旧解析
       audioEngine.setQueue(hydrated, startIndex);
-      set({ track: audioEngine.currentTrack, queue: audioEngine.queueTracks });
+      set({ track: audioEngine.currentTrack, queue: audioEngine.queueTracks, error });
     },
 
     playTrack: async track => {

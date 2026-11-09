@@ -7,6 +7,7 @@
 import type { Track } from '../types/music';
 import type { LyricData } from '../types';
 import { parseLRC } from '../utils/lyrics/parserCore';
+import { lyricProxyWebUrl } from '../services/lyricProxy';
 
 export type { LyricData };
 
@@ -35,9 +36,11 @@ interface KrcCandidate {
 
 async function krcCandidates(track: Track): Promise<KrcCandidate[]> {
   const query = `${track.title} ${track.artist}`.trim();
-  const resp = await fetch(
+  // krcs.kugou.com 的 CORS 头写死为 acsing.kugou.com，浏览器直连会被拦 → 走本地中继
+  const url = lyricProxyWebUrl(
     `http://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=${encodeURIComponent(query)}&duration=${Math.round(track.duration * 1000)}&hash=${track.id.split(':')[1] ?? ''}`,
   );
+  const resp = await fetch(url);
   if (!resp.ok) throw new Error(`kugou krc search HTTP ${resp.status}`);
   const data = (await resp.json()) as { candidates?: KrcCandidate[] };
   return data.candidates ?? [];
@@ -48,7 +51,9 @@ async function fetchKugouLyric(track: Track): Promise<LyricData | null> {
   if (candidates.length === 0) return null;
   const best = candidates[0];
   const resp = await fetch(
-    `http://krcs.kugou.com/download?ver=1&client=mobi&fmt=lrc&charset=utf8&id=${best.id}&accesskey=${best.hash}`,
+    lyricProxyWebUrl(
+      `http://krcs.kugou.com/download?ver=1&client=mobi&fmt=lrc&charset=utf8&id=${best.id}&accesskey=${best.hash}`,
+    ),
   );
   if (!resp.ok) throw new Error(`kugou krc download HTTP ${resp.status}`);
   const data = (await resp.json()) as { content?: string };
@@ -59,24 +64,39 @@ async function fetchKugouLyric(track: Track): Promise<LyricData | null> {
 // ---------- 酷我 ----------
 async function fetchKuwoLyric(track: Track): Promise<LyricData | null> {
   const id = track.id.split(':')[1] ?? track.id;
-  const resp = await fetch(
+  // m.kuwo.cn 对来源敏感（带 Origin 时返回「音乐查询失败」），走本地中继由服务端请求
+  const url = lyricProxyWebUrl(
     `https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=${encodeURIComponent(id)}`,
   );
-  if (!resp.ok) throw new Error(`kuwo lyric HTTP ${resp.status}`);
-  const data = (await resp.json()) as {
-    data?: { lrclist?: Array<{ lineLyric?: string; time?: string }> } | null;
-  };
-  const rows = data.data?.lrclist ?? [];
-  if (rows.length === 0) return null;
-  const lrc = rows
-    .map(r => {
-      const t = Number(r.time) || 0;
-      const m = Math.floor(t / 60);
-      const s = t - m * 60;
-      return `[${String(m).padStart(2, '0')}:${s.toFixed(2).padStart(5, '0')}]${r.lineLyric ?? ''}`;
-    })
-    .join('\n');
-  return parseLRC(lrc);
+  // 该接口偶发返回「音乐查询失败」（约一半概率），重试几次再放弃
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 600 * attempt));
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`kuwo lyric HTTP ${resp.status}`);
+      const data = (await resp.json()) as {
+        data?: { lrclist?: Array<{ lineLyric?: string; time?: string }> } | null;
+      };
+      const rows = data.data?.lrclist ?? [];
+      if (rows.length === 0) {
+        lastErr = new Error('kuwo 返回空歌词');
+        continue;
+      }
+      const lrc = rows
+        .map(r => {
+          const t = Number(r.time) || 0;
+          const m = Math.floor(t / 60);
+          const s = t - m * 60;
+          return `[${String(m).padStart(2, '0')}:${s.toFixed(2).padStart(5, '0')}]${r.lineLyric ?? ''}`;
+        })
+        .join('\n');
+      return parseLRC(lrc);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr ?? new Error('kuwo 取词失败');
 }
 
 // ---------- 路由与降级 ----------
@@ -106,11 +126,21 @@ export async function fetchLyric(track: Track): Promise<LyricData | null> {
   const source = lyricSourceOf(track.id);
   if (!source) return null;
   let result: LyricData | null = null;
+  // 先走 AMLL 歌词库（跨平台、带逐字 TTML、接口自带 CORS）；
+  // 未收录再回退平台自己的歌词接口。
   try {
-    result = await FETCHERS[source](track);
+    const { fetchAmllLyric } = await import('./amllLyrics');
+    result = await fetchAmllLyric(track);
   } catch (e) {
-    console.warn(`[lyrics] ${source} 取词失败:`, (e as Error).message);
-    result = null;
+    console.warn('[lyrics] AMLL 取词失败:', (e as Error).message);
+  }
+  if (!result) {
+    try {
+      result = await FETCHERS[source](track);
+    } catch (e) {
+      console.warn(`[lyrics] ${source} 取词失败:`, (e as Error).message);
+      result = null;
+    }
   }
   cache.set(track.id, result);
   return result;

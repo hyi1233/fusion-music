@@ -24,6 +24,15 @@ export const lyricProxyWebUrl = (targetUrl: string): string => (
 );
 
 /**
+ * The relay's address for a request that needs a method and a body (QQ Music's
+ * musicu.fcg only answers POST + JSON).
+ */
+export const lyricProxyWebPostUrl = (targetUrl: string, body: unknown): string => {
+    const encoded = Buffer.from(JSON.stringify(body), 'utf8').toString('base64');
+    return `/api/lyric-proxy?url=${encodeURIComponent(targetUrl)}&method=POST&body=${encodeURIComponent(encoded)}`;
+};
+
+/**
  * Sends one request through the desktop bridge. Returns null, without sending anything, when
  * the bridge is not there (the web, or a desktop preload without it), so the caller can take
  * its other route.

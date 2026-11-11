@@ -103,9 +103,9 @@ export function DiscoverView({ onOpenPlayer, onNavigateTab }: DiscoverViewProps)
   );
 
   return (
-    <div className="flex h-full w-full flex-col overflow-y-auto px-6 py-4 space-y-6 select-none scrollbar-none">
+    <div className="flex h-full w-full flex-col overflow-y-auto px-5 py-3 space-y-5 select-none scrollbar-none">
       {/* 1. 顶部音源平台切换胶囊 */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex items-center gap-2.5 overflow-x-auto py-2 shrink-0 scrollbar-none">
         {PLATFORMS.map(p => {
           const active = p.id === platform;
           return (
@@ -114,8 +114,8 @@ export function DiscoverView({ onOpenPlayer, onNavigateTab }: DiscoverViewProps)
               onClick={() => setPlatform(p.id)}
               className={`shrink-0 rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
                 active
-                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
-                  : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                  ? 'bg-rose-500 text-white shadow-md shadow-rose-500/25 ring-1 ring-white/20'
+                  : 'bg-white/5 text-white/70 hover:bg-white/10 hover:text-white border border-white/5'
               }`}
             >
               {p.name}
@@ -125,7 +125,7 @@ export function DiscoverView({ onOpenPlayer, onNavigateTab }: DiscoverViewProps)
       </div>
 
       {/* 2. 精选主推 Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-900/40 via-purple-900/20 to-slate-900/60 p-6 border border-white/10 shadow-xl backdrop-blur-md">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-rose-900/40 via-purple-900/25 to-slate-900/70 p-5 border border-white/10 shadow-xl backdrop-blur-md shrink-0">
         <div className="relative z-10 max-w-lg space-y-2">
           <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/20 px-2.5 py-0.5 text-[11px] font-medium text-rose-300">
             <Sparkles size={11} />

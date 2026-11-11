@@ -64,7 +64,7 @@ export default function App(): React.JSX.Element {
                 <Disc3 size={18} />
               </span>
               <div className="flex items-baseline gap-2">
-                <span className="text-base font-bold tracking-tight text-white">Folia Music</span>
+                <span className="text-base font-bold tracking-tight text-white">Fusion Music</span>
                 <span className="text-[11px] font-normal text-rose-300/60 hidden sm:inline">珊瑚动态声光版</span>
               </div>
             </div>

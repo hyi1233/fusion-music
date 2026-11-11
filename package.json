@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@applemusic-like-lyrics/ttml": "^1.0.1",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@chenglou/pretext": "^0.0.9",
     "@paper-design/shaders": "^0.0.80",
     "@paper-design/shaders-react": "^0.0.80",
@@ -44,6 +46,7 @@
     "zustand": "^5.0.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.10",
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^26.6.6",
     "@types/react": "^19.1.0",

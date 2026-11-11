@@ -10,6 +10,7 @@ import {
     type Theme,
 } from '../../../../types';
 import { extractRepresentativeColors } from '../../../../utils/colorExtractor';
+import { normalizeThemeColor } from '../../../../utils/themeColorMath';
 import { updatePaperShaderUniforms } from '../../../../utils/paperShaderUniforms';
 import { createPaperShaderReleaseRef, PAPER_SHADER_CONTEXT_ATTRIBUTES } from '../../../../utils/paperShaderContext';
 import { useFirstFrameDrawn } from '../../styleTransition/firstFrame';
@@ -120,10 +121,13 @@ export const resolveLatentShaderColors = (
     const secondary = coverColors[1] ?? theme.primaryColor;
     const tertiary = coverColors[2] ?? primary;
     const quaternary = coverColors[3] ?? secondary;
+    // Paper shaders only accept hex / rgb() strings and log "Unsupported color format transparent"
+    // for the CSS keyword. Never hand a raw theme colour to a shader uniform.
+    const background = normalizeThemeColor(theme.backgroundColor);
     return {
-        ditheringBack: theme.backgroundColor,
+        ditheringBack: background,
         ditheringFront: primary,
-        mesh: [primary, secondary, tertiary, quaternary, theme.backgroundColor, theme.accentColor],
+        mesh: [primary, secondary, tertiary, quaternary, background, theme.accentColor],
     };
 };
 
@@ -187,7 +191,7 @@ const LatentBackground: React.FC<LatentBackgroundProps> = ({
         [coverColors, theme, tuning.colorSource],
     );
     const blendedColors = useBlendedColors(
-        [theme.backgroundColor, resolvedColors.ditheringBack, resolvedColors.ditheringFront, ...resolvedColors.mesh],
+        [normalizeThemeColor(theme.backgroundColor), resolvedColors.ditheringBack, resolvedColors.ditheringFront, ...resolvedColors.mesh],
         blendMs,
         blendProgress,
     );

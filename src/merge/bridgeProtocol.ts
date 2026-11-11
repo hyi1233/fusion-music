@@ -69,10 +69,41 @@ export interface ShowControlsCommand {
     visible: boolean;
 }
 
+/** 封面背景的模糊档位。 */
+export type FoliaBlurLevel = 'weak' | 'medium' | 'strong';
+
+/** 效果强度（混乱程度）档位：静止 / 微动 / 标准 / 狂暴。 */
+export type FoliaIntensityLevel = 'still' | 'subtle' | 'normal' | 'chaotic';
+
+export const FOLIA_BLUR_LEVELS: readonly FoliaBlurLevel[] = ['weak', 'medium', 'strong'];
+export const FOLIA_INTENSITY_LEVELS: readonly FoliaIntensityLevel[] = ['still', 'subtle', 'normal', 'chaotic'];
+
+export const isFoliaBlurLevel = (value: unknown): value is FoliaBlurLevel =>
+    typeof value === 'string' && (FOLIA_BLUR_LEVELS as readonly string[]).includes(value);
+
+export const isFoliaIntensityLevel = (value: unknown): value is FoliaIntensityLevel =>
+    typeof value === 'string' && (FOLIA_INTENSITY_LEVELS as readonly string[]).includes(value);
+
+/** 背景层设置：是否用封面、模糊档位、是否暗化。 */
+export interface SetBackdropCommand {
+    type: 'setBackdrop';
+    cover: boolean;
+    blur: FoliaBlurLevel;
+    dim: boolean;
+}
+
+/** 效果强度设置（混乱程度）。 */
+export interface SetIntensityCommand {
+    type: 'setIntensity';
+    level: FoliaIntensityLevel;
+}
+
 export type FoliaBridgeCommand =
     | SetLinesCommand
     | SetCurrentTimeCommand
     | SetModeCommand
+    | SetBackdropCommand
+    | SetIntensityCommand
     | ShowControlsCommand;
 
 export type FoliaBridgeEventPayload =
@@ -194,6 +225,16 @@ export const parseBridgeCommand = (
             if (!mode) return { ok: false, error: 'setMode:mode-empty' };
             if (mode.length > 64) return { ok: false, error: 'setMode:mode-too-long' };
             return { ok: true, command: { type: 'setMode', mode } };
+        }
+        case 'setBackdrop': {
+            if (typeof value.cover !== 'boolean') return { ok: false, error: 'setBackdrop:cover-not-boolean' };
+            if (!isFoliaBlurLevel(value.blur)) return { ok: false, error: 'setBackdrop:blur-invalid' };
+            if (typeof value.dim !== 'boolean') return { ok: false, error: 'setBackdrop:dim-not-boolean' };
+            return { ok: true, command: { type: 'setBackdrop', cover: value.cover, blur: value.blur, dim: value.dim } };
+        }
+        case 'setIntensity': {
+            if (!isFoliaIntensityLevel(value.level)) return { ok: false, error: 'setIntensity:level-invalid' };
+            return { ok: true, command: { type: 'setIntensity', level: value.level } };
         }
         case 'showControls': {
             if (typeof value.visible !== 'boolean') return { ok: false, error: 'showControls:visible-not-boolean' };

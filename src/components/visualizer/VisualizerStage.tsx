@@ -21,6 +21,8 @@ import { motionValue, useMotionValue, useSpring, type MotionValue } from 'framer
 import VisualizerRenderer from './VisualizerRenderer';
 import { BUILTIN_VISUALIZER_MODES, DEFAULT_VISUALIZER_MODE } from '../../types/visualizerModes';
 import type { AudioBands, Line, Theme, VisualizerMode } from '../../types';
+import { isTransparentColor, normalizeThemeColor } from '../../utils/themeColorMath';
+import type { VisualizerBackgroundConfig } from './backgrounds/definition';
 
 /** The silent stand-in a band motion value holds when nothing is analysing audio. */
 const SILENT_BAND: MotionValue<number> = motionValue(0);
@@ -67,6 +69,11 @@ export interface VisualizerStageProps {
     visualizerOpacity?: number;
     /** Extra classes on the full-bleed wrapper. */
     className?: string;
+    /**
+     * Hosts that draw their own backdrop (the RN WebView cover layer, an OBS transparent source)
+     * pass `{ transparent: true }` to skip the visualizer's built-in background layer entirely.
+     */
+    background?: VisualizerBackgroundConfig;
     /** Reports the line index currently on screen, for a host that follows the stage's own clock. */
     onLineIndexChange?: (index: number) => void;
 }
@@ -150,6 +157,7 @@ const VisualizerStage: React.FC<VisualizerStageProps> = ({
     staticMode = false,
     visualizerOpacity,
     className,
+    background,
     onLineIndexChange,
 }) => {
     const driven = typeof currentTime === 'number' || hostClock !== undefined;
@@ -203,15 +211,27 @@ const VisualizerStage: React.FC<VisualizerStageProps> = ({
 
     const resolvedDuration = duration ?? getLinesEndTime(lines);
 
+    // A theme can arrive from a host bridge as the CSS keyword `transparent` (or as an 8-digit
+    // hex). Strict Pixi / THREE / @paper-design/shaders colour parsers cannot read those, so
+    // canonicalise the background once here, before any style or background layer sees it.
+    const safeTheme = useMemo<Theme>(() => ({
+        ...theme,
+        backgroundColor: normalizeThemeColor(theme.backgroundColor, DEFAULT_STAGE_THEME.backgroundColor),
+    }), [theme]);
+
     return (
-        <div className={className ?? 'relative h-full w-full overflow-hidden'} style={{ background: theme.backgroundColor }}>
+        <div
+            className={className ?? 'relative h-full w-full overflow-hidden'}
+            style={{ background: isTransparentColor(safeTheme.backgroundColor) ? 'transparent' : safeTheme.backgroundColor }}
+        >
             <VisualizerRenderer
                 mode={mode}
                 currentTime={clock}
                 duration={resolvedDuration}
                 currentLineIndex={index}
                 lines={lines}
-                theme={theme}
+                theme={safeTheme}
+                background={background}
                 audioPower={audioPower}
                 audioBands={audioBands}
                 showText={showText}

@@ -1,6 +1,7 @@
 import type { MotionValue } from 'framer-motion';
 import type { AudioBands, LyricRenderScale, SonnetTuning, Theme } from '../../../types';
 import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
+import { parseColorAlpha } from '../colorMix';
 import type { SonnetProgram } from './types';
 import { findSonnetParagraphIndexAtTime } from './sonnetProgram';
 import { buildSonnetScene, type SceneView } from './sonnetSceneBuilder';
@@ -659,10 +660,16 @@ export class SonnetPixiRuntime {
         const cover = this.swapCover;
         // 0 -> 1 -> 0 across the dissolve, opaque exactly where the commit lands.
         cover.alpha = 1 - Math.abs(progress * 2 - 1);
+        // A transparent theme background must stay transparent during the swap: Pixi Color drops
+        // the alpha channel in toNumber(), so carry it over explicitly or the dissolve flashes black.
+        const backgroundAlpha = parseColorAlpha(this.options.theme.backgroundColor) ?? 1;
         cover.clear();
         cover
             .rect(0, 0, this.lastWidth, this.lastHeight)
-            .fill({ color: this.pixi.Color.shared.setValue(this.options.theme.backgroundColor).toNumber() });
+            .fill({
+                color: this.pixi.Color.shared.setValue(this.options.theme.backgroundColor).toNumber(),
+                alpha: backgroundAlpha,
+            });
     }
 
     /** Reads a mod modulation key, falling back to 1 so the frame is unchanged when absent. */

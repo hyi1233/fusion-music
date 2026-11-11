@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { type MotionValue } from 'framer-motion';
 import * as THREE from 'three';
 import { type AudioBands, type DioramaGeometryVisibility, type Theme } from '../../../types';
+import { toOpaqueHex } from '../../../utils/themeColorMath';
 import { buildLineGraphemeTimeline, type GraphemeTiming } from '../../../utils/lyrics/graphemeTiming';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { prepareDioramaKeywordMatchers, resolveDioramaKeywordUnitColors } from './dioramaKeywordColor';
@@ -190,7 +191,7 @@ const DioramaScene: React.FC<DioramaSceneProps> = ({
         primary: new THREE.Color(colors.primary),
         accent: new THREE.Color(colors.accent),
         secondary: new THREE.Color(colors.secondary),
-        bg: new THREE.Color(theme.backgroundColor),
+        bg: new THREE.Color(toOpaqueHex(theme.backgroundColor)),
     }), [colors, theme.backgroundColor]);
     const dampedColorsRef = useRef<DampedThemeColors | null>(null);
 

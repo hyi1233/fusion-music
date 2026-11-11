@@ -16,11 +16,12 @@ import { useMotionValue } from 'framer-motion';
 import VisualizerStage, { DEFAULT_STAGE_THEME } from '../components/visualizer/VisualizerStage';
 import { BUILTIN_VISUALIZER_MODES, DEFAULT_VISUALIZER_MODE } from '../types/visualizerModes';
 import type { Line, Theme, VisualizerMode } from '../types';
-import type { FoliaBridgeCommand, FoliaBridgeEventPayload } from '../merge/bridgeProtocol';
+import type { FoliaBlurLevel, FoliaBridgeCommand, FoliaBridgeEventPayload, FoliaIntensityLevel } from '../merge/bridgeProtocol';
 import { clockTimeAt, createPlaybackClock, syncPlaybackClock } from './playbackClock';
 import { createWebViewTransport, type WebViewTransport } from './transport';
 import { resolveMode, type WebViewPageOptions } from './pageOptions';
 import { DEMO_DURATION, DEMO_LINES } from '../demo/demoLyrics';
+import { isTransparentColor, normalizeThemeColor, TRANSPARENT_THEME_COLOR } from '../utils/themeColorMath';
 
 interface StageMeta {
     duration?: number;
@@ -73,6 +74,43 @@ const modeChipStyle: React.CSSProperties = {
     whiteSpace: 'nowrap',
 };
 
+const backdropStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    overflow: 'hidden',
+    pointerEvents: 'none',
+};
+
+const backdropImageStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: '-8%',
+    width: '116%',
+    height: '116%',
+    objectFit: 'cover',
+};
+
+const backdropDimStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+};
+
+const BLUR_PX: Record<FoliaBlurLevel, number> = { weak: 4, medium: 12, strong: 28 };
+const DIM_OPACITY: Record<FoliaBlurLevel, number> = { weak: 0.18, medium: 0.34, strong: 0.52 };
+
+/** 效果强度 → 视觉内核参数：静止冻结画面，微动/标准/狂暴对应主题的 animationIntensity。 */
+const INTENSITY_STATIC: Record<FoliaIntensityLevel, boolean> = {
+    still: true,
+    subtle: false,
+    normal: false,
+    chaotic: false,
+};
+const INTENSITY_THEME: Record<FoliaIntensityLevel, Theme['animationIntensity']> = {
+    still: 'calm',
+    subtle: 'calm',
+    normal: 'normal',
+    chaotic: 'chaotic',
+};
+
 const placeholderStyle: React.CSSProperties = {
     position: 'absolute',
     inset: 0,
@@ -98,6 +136,12 @@ export function FoliaWebViewPage({ options, transport: injectedTransport }: Foli
         staticMode: false,
     }));
     const [controlsVisible, setControlsVisible] = useState(options.controls);
+    const [backdrop, setBackdrop] = useState<{ cover: boolean; blur: FoliaBlurLevel; dim: boolean }>({
+        cover: true,
+        blur: 'medium',
+        dim: true,
+    });
+    const [intensity, setIntensity] = useState<FoliaIntensityLevel>('normal');
     const [hostActive, setHostActive] = useState(false);
 
     const clock = useMotionValue(0);
@@ -127,7 +171,15 @@ export function FoliaWebViewPage({ options, transport: injectedTransport }: Foli
                     if (command.songAlbum !== undefined) next.songAlbum = command.songAlbum;
                     if (command.coverUrl !== undefined) next.coverUrl = command.coverUrl;
                     if (command.seed !== undefined) next.seed = command.seed;
-                    if (command.theme) next.theme = { ...prev.theme, ...command.theme };
+                    if (command.theme) {
+                        next.theme = { ...prev.theme, ...command.theme };
+                        // 宿主可能送来 CSS 关键字 'transparent' 或 8 位 hex；在桥边界就归一成
+                        // Pixi / Three / shader 都能解析的合法颜色，避免脏值流进渲染内核。
+                        next.theme.backgroundColor = normalizeThemeColor(
+                            next.theme.backgroundColor,
+                            DEFAULT_STAGE_THEME.backgroundColor,
+                        );
+                    }
                     if (command.showText !== undefined) next.showText = command.showText;
                     if (command.staticMode !== undefined) next.staticMode = command.staticMode;
                     return next;
@@ -158,6 +210,14 @@ export function FoliaWebViewPage({ options, transport: injectedTransport }: Foli
                     return;
                 }
                 setMode(next);
+                break;
+            }
+            case 'setBackdrop': {
+                setBackdrop({ cover: command.cover, blur: command.blur, dim: command.dim });
+                break;
+            }
+            case 'setIntensity': {
+                setIntensity(command.level);
                 break;
             }
             case 'showControls': {
@@ -247,34 +307,70 @@ export function FoliaWebViewPage({ options, transport: injectedTransport }: Foli
             lines: lines.length,
             hostActive,
             controls: controlsVisible,
+            backdrop,
+            intensity,
             transport: transport.kind,
         });
-    }, [mode, lines.length, hostActive, controlsVisible, transport]);
+    }, [mode, lines.length, hostActive, controlsVisible, backdrop, intensity, transport]);
 
-    const theme = meta.theme;
+    const backdropActive = backdrop.cover && !!meta.coverUrl;
+    // 封面背景开启时，舞台底色让位给背景层（否则不透明底色会盖住封面）。
+    //
+    // 注意：这里**不能**用 CSS 关键字 'transparent'。`VisualizerStage` 会把 theme.backgroundColor
+    // 一路喂给 Pixi Color / THREE.Color / @paper-design/shaders / Canvas 的取色器，它们只认
+    // hex 与 rgb()：关键字会让 shader 报 `Unsupported color format transparent`、Three 静默保留
+    // 白色（背景变白），本项目的 hex 解析也会退化成白色兜底。改用所有解析器都认的
+    // `rgba(0, 0, 0, 0)`：CSS 语义等价（完全透明），但每个取色器都能读出 (0,0,0,0)。
+    const theme: Theme = backdropActive
+        ? { ...meta.theme, backgroundColor: TRANSPARENT_THEME_COLOR }
+        : { ...meta.theme, backgroundColor: normalizeThemeColor(meta.theme.backgroundColor, DEFAULT_STAGE_THEME.backgroundColor) };
+    // 封面背景开启时顺带卸掉视觉内核自带的背景层，封面才能真正透上来。
+    const stageBackground = backdropActive ? { transparent: true } : undefined;
 
     return (
         <div
             className="relative h-full w-full overflow-hidden"
-            style={{ background: theme.backgroundColor }}
+            style={{ background: backdropActive || isTransparentColor(theme.backgroundColor) ? 'transparent' : theme.backgroundColor }}
             data-folia-webview="ready"
             data-folia-lines={lines.length}
             data-folia-host={hostActive ? 'driven' : 'local'}
             onPointerUp={handlePointerUp}
         >
+            {backdrop.cover && meta.coverUrl ? (
+                <div style={backdropStyle} data-folia-backdrop="cover">
+                    <img
+                        src={meta.coverUrl}
+                        alt=""
+                        style={{
+                            ...backdropImageStyle,
+                            filter: `blur(${BLUR_PX[backdrop.blur]}px)`,
+                        }}
+                    />
+                    {backdrop.dim ? (
+                        <div
+                            style={{
+                                ...backdropDimStyle,
+                                background: `rgba(3, 5, 10, ${DIM_OPACITY[backdrop.blur]})`,
+                            }}
+                        />
+                    ) : null}
+                </div>
+            ) : null}
+
             <VisualizerStage
                 lines={lines}
                 mode={mode}
                 clock={hostActive ? clock : undefined}
                 duration={meta.duration}
-                theme={theme}
+                theme={{ ...theme, animationIntensity: INTENSITY_THEME[intensity] }}
+                background={stageBackground}
                 seed={meta.seed}
                 songTitle={meta.songTitle}
                 songArtist={meta.songArtist}
                 songAlbum={meta.songAlbum}
-                coverUrl={meta.coverUrl}
+                coverUrl={backdrop.cover ? meta.coverUrl : null}
                 showText={meta.showText}
-                staticMode={meta.staticMode}
+                staticMode={meta.staticMode || INTENSITY_STATIC[intensity]}
                 onLineIndexChange={handleLineIndexChange}
             />
 

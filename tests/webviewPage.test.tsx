@@ -6,6 +6,9 @@ import { parseBridgeCommand, type FoliaBridgeCommand, type FoliaBridgeEventPaylo
 import type { WebViewTransport } from '../src/webview/transport';
 import type { WebViewPageOptions } from '../src/webview/pageOptions';
 
+// React 19 要求宿主显式声明支持 act，否则每次渲染都会打警告。
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 // 视觉层是 WebGL/pixi，jsdom 里跑不了；这里只验证"桥 → 页面状态 → VisualizerStage props"
 // 这一段接线，所以把舞台替换成记录 props 的空组件。真实的渲染由构建产物 + QA 截图覆盖。
 const { stageProps } = vi.hoisted(() => ({ stageProps: { current: null as Record<string, unknown> | null } }));
@@ -170,6 +173,44 @@ describe('FoliaWebViewPage', () => {
         const lineChanges = harness.sent.filter(event => event.type === 'lineChange');
         expect(lineChanges).toHaveLength(1);
         expect(lineChanges[0]).toMatchObject({ index: 1, startTime: 1 });
+    });
+
+    it('封面背景开启时舞台底色是可解析的透明色，不是 CSS 关键字', async () => {
+        const harness = createHarness();
+        const element = await mount(baseOptions, harness);
+        await act(async () => {
+            harness.receive({
+                type: 'setLines',
+                lines: [{ time: 0, text: '第一行' }],
+                coverUrl: 'https://example.test/cover.jpg',
+                songTitle: '带封面的歌',
+            });
+        });
+
+        // 外层 DOM 让位给封面层
+        expect(element.style.background).toBe('transparent');
+        expect(element.querySelector('[data-folia-backdrop="cover"]')).not.toBeNull();
+
+        // 传给 VisualizerStage 的不能是 'transparent'：Pixi / THREE / shader 取色器会报错
+        const props = stageProps.current!;
+        const stageTheme = props.theme as { backgroundColor: string };
+        expect(stageTheme.backgroundColor).toBe('rgba(0, 0, 0, 0)');
+        expect(stageTheme.backgroundColor).not.toBe('transparent');
+        expect(props.background).toEqual({ transparent: true });
+    });
+
+    it('宿主通过 setLines.theme 送来 transparent 关键字时在桥边界被归一', async () => {
+        const harness = createHarness();
+        await mount(baseOptions, harness);
+        await act(async () => {
+            harness.receive({
+                type: 'setLines',
+                lines: [{ time: 0, text: '第一行' }],
+                theme: { backgroundColor: 'transparent' },
+            });
+        });
+        const stageTheme = stageProps.current!.theme as { backgroundColor: string };
+        expect(stageTheme.backgroundColor).toBe('rgba(0, 0, 0, 0)');
     });
 
     it('demo 模式自带示例歌词，并在没有宿主时用本地时钟', async () => {

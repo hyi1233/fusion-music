@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { type MotionValue } from 'framer-motion';
 import * as THREE from 'three';
 import { type AudioBands, type DioramaGeometryMode } from '../../../types';
+import { toOpaqueHex } from '../../../utils/themeColorMath';
 import { DIORAMA_STEP_DISTANCE, hashSeed, seededUnit } from './cameraPath';
 import { type DioramaParticleClusterAnchor } from './dioramaGeometry';
 import {
@@ -218,7 +219,7 @@ export const DioramaParticleField: React.FC<DioramaParticleFieldProps> = ({
         primary: new THREE.Color(primaryColor),
         accent: new THREE.Color(accentColor),
         secondary: new THREE.Color(secondaryColor),
-    }, new THREE.Color(backgroundColor)), [primaryColor, accentColor, secondaryColor, backgroundColor]);
+    }, new THREE.Color(toOpaqueHex(backgroundColor))), [primaryColor, accentColor, secondaryColor, backgroundColor]);
     // Materials are created ONCE; their colours chase the theme via lerp each frame (see useFrame), and
     // the glow intensity is pushed by the effect below. Lazy refs, not useMemo: useMemo is a cache React
     // is explicitly allowed to discard and rebuild, and these own GPU resources - "must exist exactly

@@ -1,59 +1,58 @@
-// src/components/ui/MiniPlayer.tsx — 底部迷你播放条
-//
-// 在搜索/榜单/设置页显示当前曲目，一键回到播放页。遥控器用 Enter 激活。
-
+// src/components/ui/MiniPlayer.tsx — 现代悬浮迷你播放胶囊
 import { Pause, Play, SkipForward } from 'lucide-react';
 import { usePlayerStore } from '../../player/playerStore';
-import { useFusionT } from '../../i18n/fusion/useFusionT';
 import { formatDuration } from './SongRow';
 
 export function MiniPlayer({ onOpenPlayer }: { onOpenPlayer: () => void }): React.JSX.Element | null {
-  const t = useFusionT();
   const track = usePlayerStore(s => s.track);
   const status = usePlayerStore(s => s.status);
   const currentTime = usePlayerStore(s => s.currentTime);
   const duration = usePlayerStore(s => s.duration);
-  const queueLength = usePlayerStore(s => s.queue.length);
-  const currentIndex = usePlayerStore(s => s.currentIndex);
   const toggle = usePlayerStore(s => s.toggle);
   const next = usePlayerStore(s => s.next);
 
   if (!track) return null;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5">
+    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-2.5 shadow-2xl backdrop-blur-xl transition hover:border-white/20">
       <button
         onClick={onOpenPlayer}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        aria-label={t('mini.openPlayer')}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left group"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-500/40 to-indigo-500/40 text-sm font-semibold text-white">
-          {track.title.slice(0, 1)}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm text-white">{track.title}</span>
-          <span className="block truncate text-xs text-white/45">
-            {track.artist || t('song.unknownArtist')}
-            {queueLength > 0 ? ` · ${t('mini.queuePosition', { index: currentIndex + 1, total: queueLength })}` : ''}
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-rose-500/40 via-purple-500/30 to-indigo-500/40 text-sm font-bold text-white shadow-md">
+          {track.cover ? (
+            <img src={track.cover} alt={track.title} className="h-full w-full object-cover" />
+          ) : (
+            track.title.slice(0, 1)
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-semibold text-white group-hover:text-rose-300 transition">
+            {track.title}
           </span>
-        </span>
-        <span className="shrink-0 text-xs tabular-nums text-white/40">
+          <span className="block truncate text-[11px] text-white/50">
+            {track.artist || '未知歌手'}
+          </span>
+        </div>
+        <span className="shrink-0 text-[11px] tabular-nums text-white/40">
           {formatDuration(currentTime)} / {formatDuration(duration)}
         </span>
       </button>
+
       <button
         onClick={toggle}
-        aria-label={status === 'playing' ? t('playing.pause') : t('playing.play')}
-        className="rounded-full bg-white/10 p-2 text-white/85 transition hover:bg-white/20"
+        title={status === 'playing' ? '暂停' : '播放'}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-500 text-white shadow-md shadow-rose-500/20 transition active:scale-95 hover:bg-rose-400"
       >
-        {status === 'playing' ? <Pause size={16} /> : <Play size={16} />}
+        {status === 'playing' ? <Pause size={15} /> : <Play size={15} className="ml-0.5" />}
       </button>
+
       <button
         onClick={next}
-        aria-label={t('playing.next')}
-        className="rounded-full bg-white/10 p-2 text-white/85 transition hover:bg-white/20"
+        title="下一首"
+        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/80 transition active:scale-95 hover:bg-white/20 hover:text-white"
       >
-        <SkipForward size={16} />
+        <SkipForward size={14} />
       </button>
     </div>
   );

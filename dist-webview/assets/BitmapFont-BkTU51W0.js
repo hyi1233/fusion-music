@@ -1,1 +1,0 @@
-export{BitmapFont}from"./lib-BtFm0P97.js";

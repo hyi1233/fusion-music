@@ -1,10 +1,4 @@
-// src/stores/useFusionUiStore.ts — 网页版外壳状态（F2a）
-//
-// 这里只放「跨页面、需要记住」的界面状态：当前栏目 / 路由、默认歌词样式、
-// 音源脚本地址。全部落 localStorage，刷新后还在。
-//
-// 播放状态（当前曲目、进度、音量）在 player/playerStore 里，不重复一份。
-
+// src/stores/useFusionUiStore.ts — 现代应用全局界面状态
 import { create } from 'zustand';
 import { getStoredString, setStoredString } from './storagePrimitives';
 import { DEFAULT_VISUALIZER_MODE, isBuiltinVisualizerMode } from '../types/visualizerModes';
@@ -14,7 +8,7 @@ export const STYLE_MODE_STORAGE_KEY = 'fusion_default_lyric_style';
 export const SCRIPT_URL_STORAGE_KEY = 'fusion_lx_script_url';
 
 export type AppRoute = 'main' | 'playing';
-export type AppTab = 'search' | 'browse' | 'settings';
+export type AppTab = 'discover' | 'playlists' | 'leaderboard' | 'search' | 'settings';
 
 export const readStoredStyleMode = (): VisualizerMode => {
   const saved = getStoredString(STYLE_MODE_STORAGE_KEY, '');
@@ -26,11 +20,11 @@ export const readStoredScriptUrl = (): string => getStoredString(SCRIPT_URL_STOR
 interface FusionUiState {
   route: AppRoute;
   tab: AppTab;
-  /** 播放页当前使用的歌词样式（可在播放页面板里改） */
+  /** 播放页当前使用的歌词样式 */
   styleMode: VisualizerMode;
   /** 设置页里的「默认歌词样式」 */
   defaultStyleMode: VisualizerMode;
-  /** 洛雪音源脚本地址，空串表示用内置默认脚本 */
+  /** 自定义音源脚本地址 */
   scriptUrl: string;
   setRoute: (route: AppRoute) => void;
   setTab: (tab: AppTab) => void;
@@ -42,7 +36,7 @@ interface FusionUiState {
 
 export const useFusionUiStore = create<FusionUiState>((set, get) => ({
   route: 'main',
-  tab: 'search',
+  tab: 'discover',
   styleMode: readStoredStyleMode(),
   defaultStyleMode: readStoredStyleMode(),
   scriptUrl: readStoredScriptUrl(),
@@ -68,11 +62,11 @@ export const useFusionUiStore = create<FusionUiState>((set, get) => ({
   },
 
   resetSettings: () => {
-    setStoredString(STYLE_MODE_STORAGE_KEY, DEFAULT_VISUALIZER_MODE);
+    setStoredString(STYLE_MODE_STORAGE_KEY, '');
     setStoredString(SCRIPT_URL_STORAGE_KEY, '');
     set({
+      styleMode: DEFAULT_VISUALIZER_MODE,
       defaultStyleMode: DEFAULT_VISUALIZER_MODE,
-      styleMode: get().styleMode,
       scriptUrl: '',
     });
   },

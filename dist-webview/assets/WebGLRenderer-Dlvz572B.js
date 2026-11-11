@@ -1,1 +1,0 @@
-export{WebGLRenderer}from"./lib-BtFm0P97.js";
